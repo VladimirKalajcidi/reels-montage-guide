@@ -1,15 +1,17 @@
-"""Звук: синтез SFX + микс с голосом. Уровни — delivery-specs.md §5."""
+"""Звук ролика — базовый шаблон: синтез SFX + микс с голосом. Уровни — delivery-specs.md §5.
+
+Для нового ролика: скопируй в sfx<N>.py вместе с render<N>.py, поменяй N ниже и в импорте."""
 import os, sys, subprocess, wave
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from storyboard import SHOTS, DUR
-from storyboard import NUM_REVEALS, CASCADES
+from storyboard import SHOTS, CAPS, DUR, NUM_REVEALS
 
 BUILD = os.path.dirname(os.path.abspath(__file__))
-SRC = "/Users/vladimirkalajcidi/reels_good2/videos/4/source.mov"
-VID = f"{BUILD}/assets/_video.mp4"
-OUT = "/Users/vladimirkalajcidi/reels_good2/videos/4/fourcolor_edit.mp4"
+VIDEO_NUM = 1  # <- номер ролика (папка videos/<N>/) — подставь свой
+SRC = f"{BUILD}/../videos/{VIDEO_NUM}/source.mov"
+VID = f"{BUILD}/assets/_video_{VIDEO_NUM}.mp4"
+OUT = f"{BUILD}/../videos/{VIDEO_NUM}/edit.mp4"
 SR = 48000
 
 
@@ -23,10 +25,8 @@ def env(n, a, d, curve=2.0):
 def low_whoosh(dur=0.42):
     n = int(SR * dur)
     t = np.linspace(0, dur, n, endpoint=False)
-    # шум + низкий свип
     rng = np.random.default_rng(3)
     noise = rng.normal(0, 1, n)
-    # однополюсный ФНЧ ~180 Гц
     a = np.exp(-2 * np.pi * 180 / SR)
     y = np.zeros(n); prev = 0.0
     for i in range(n):
@@ -51,13 +51,48 @@ def impact(dur=0.55):
     return s / (np.abs(s).max() + 1e-9)
 
 
-def tick(dur=0.10):
+def text_pop(dur=0.20):
+    """Мягкий «пуф» появления текста (delivery-specs.md §5): шум с горбом ~1.9 кГц (≈0.9–4 кГц)
+    + тихий призвук 1.1→1.3 кГц, атака 30мс. Резкий «вжух» 5–12 кГц автор забраковал."""
     n = int(SR * dur)
-    t = np.linspace(0, dur, n, endpoint=False)
-    rng = np.random.default_rng(5)
-    s = rng.normal(0, 1, n) * np.exp(-t * 110)
-    s += 0.5 * np.sin(2 * np.pi * 1400 * t) * np.exp(-t * 90)
-    return s / (np.abs(s).max() + 1e-9)
+    t = np.arange(n) / SR
+    rng = np.random.default_rng(21)
+    noise = rng.normal(0, 1, n + 4096)
+    F = np.fft.rfft(noise); fr = np.fft.rfftfreq(len(noise), 1 / SR)
+    shape = np.exp(-0.5 * ((np.log(np.maximum(fr, 1)) - np.log(1900)) / 0.45) ** 2)
+    air = np.fft.irfft(F * shape, len(noise))[:n]
+    air /= np.abs(air).max() + 1e-9
+    f0 = 1100 + 200 * np.clip(t / 0.06, 0, 1)
+    tone = np.sin(2 * np.pi * np.cumsum(f0) / SR) * np.exp(-t * 45)
+    env = np.where(t < TP_PEAK_AT, np.sin(0.5 * np.pi * t / TP_PEAK_AT) ** 2,
+                   np.exp(-(t - TP_PEAK_AT) / 0.045))
+    fade = np.minimum(1, (n - np.arange(n)) / (0.015 * SR))
+    s = (air * env + 0.35 * tone * np.minimum(1, t / 0.004)) * fade
+    return s / (np.sqrt((s[:int(0.10 * SR)] ** 2).mean()) + 1e-9)       # RMS первых 100мс = 1
+
+
+TP_GAP = 2.2          # звук появления текста — не чаще раза в 2.2с (в среднем ≈ раз в 3с)
+TP_REL_DB = -16.0     # RMS «пуфа» относительно RMS голоса
+TP_PEAK_AT = 0.03     # пик звука совпадает с моментом всплытия слова (+0.05с)
+
+
+def text_pop_times():
+    """На первом слове фразы: первая фраза ролика — всегда, затем фразы с цветным словом,
+    фразы после паузы, остальные — жадно, с шагом не меньше TP_GAP."""
+    from captions import Captions
+    cap = Captions(CAPS, SHOTS, DUR, os.path.join(os.path.dirname(SRC), "words.json"))
+    starts = cap.phrase_starts()
+    cand = []
+    for i, (t0, t1, runs, slot) in enumerate(CAPS):
+        colored = any(k in ("red", "teal") for (_, k, _) in runs)
+        pause = i > 0 and t0 - CAPS[i - 1][1] > 0.25
+        prio = -1 if i == 0 else (0 if colored else (1 if pause else 2))
+        cand.append((prio, starts[i]))
+    chosen = []
+    for prio, t in sorted(cand):
+        if all(abs(t - c) >= TP_GAP for c in chosen):
+            chosen.append(t)
+    return sorted(chosen)
 
 
 def read_wav(p):
@@ -68,7 +103,7 @@ def read_wav(p):
 
 
 def main():
-    tmp = f"{BUILD}/assets/_voice.wav"
+    tmp = f"{BUILD}/assets/_voice_{VIDEO_NUM}.wav"
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", SRC,
                     "-vn", "-ac", "2", "-ar", str(SR), "-c:a", "pcm_s16le", tmp], check=True)
     voice = read_wav(tmp)
@@ -87,27 +122,25 @@ def main():
         bed[i:i + n, 0] += sig[:n] * gain
         bed[i:i + n, 1] += sig[:n] * gain
 
-    WH, IM, TK = low_whoosh(), impact(), tick()
+    WH, IM = low_whoosh(), impact()
     cuts = [s[0] for s in SHOTS[1:]]
     for c in cuts:
-        # whoosh стартует на кадре реза
         add(WH, c, peak * 0.040)
     for t in NUM_REVEALS:
-        add(IM, t, peak * 0.070)
-    for t in CASCADES:
-        for k in range(3):
-            add(TK, t + k * 0.085, peak * 0.030)
+        add(IM, t + 0.05, peak * 0.070)
+    TPS = text_pop()
+    vrms = np.sqrt((voice[np.abs(voice[:, 0]) > 0.02] ** 2).mean())   # RMS голоса по речи
+    for t in text_pop_times():
+        add(TPS, t + 0.05 - TP_PEAK_AT, vrms * 10 ** (TP_REL_DB / 20))
 
-    # --- музыкальная подложка (delivery-specs §5: тише всего)
-    music_path = "/Users/vladimirkalajcidi/reels_good2/audios/song1.mp3"
+    music_path = f"{BUILD}/../audios/song1.mp3"  # <- подставь свой трек из audios/
     if os.path.exists(music_path):
-        mw = f"{BUILD}/assets/_music.wav"
+        mw = f"{BUILD}/assets/_music_{VIDEO_NUM}.wav"
         subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", music_path,
                         "-ac", "2", "-ar", str(SR), "-c:a", "pcm_s16le", mw], check=True)
         mus = read_wav(mw)
         if mus.shape[1] == 1:
             mus = np.repeat(mus, 2, axis=1)
-        # склейка петли с кроссфейдом 0.25с, чтобы шва не было слышно
         xf = int(0.25 * SR)
         core = mus[:len(mus) - xf]
         tail = mus[len(mus) - xf:]
@@ -116,7 +149,6 @@ def main():
         loop[:xf] = loop[:xf] * ramp + tail * (1 - ramp)
         reps = int(np.ceil(N / len(loop))) + 1
         track = np.tile(loop, (reps, 1))[:N]
-        # уровень: ~19 dB ниже RMS голоса
         vr = np.sqrt((voice ** 2).mean()) + 1e-9
         mr = np.sqrt((track ** 2).mean()) + 1e-9
         track *= (vr / mr) * (10 ** (-19 / 20))
@@ -130,7 +162,7 @@ def main():
     m = np.abs(mix).max()
     if m > 0.99:
         mix *= 0.99 / m
-    out = f"{BUILD}/assets/_mix.wav"
+    out = f"{BUILD}/assets/_mix_{VIDEO_NUM}.wav"
     w = wave.open(out, "wb"); w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR)
     w.writeframes((mix * 32767).astype(np.int16).tobytes()); w.close()
 
