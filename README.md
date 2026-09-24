@@ -19,8 +19,13 @@
 
 2. **ffmpeg** — вся склейка, кроп, грейд и мукс звука идут через него:
    ```bash
-   brew install ffmpeg   # macOS
+   brew install ffmpeg                        # macOS
+   sudo apt install ffmpeg                    # Linux (Debian/Ubuntu)
+   sudo dnf install ffmpeg                    # Linux (Fedora)
+   winget install Gyan.FFmpeg                 # Windows (или choco install ffmpeg)
    ```
+   На Windows после установки через `winget`/`choco` проверь, что `ffmpeg` виден в PATH
+   (`ffmpeg -version` в новом окне терминала).
 
 3. **Транскрипция ставится отдельно, сама по себе не идёт в комплекте.** Нужен `whisper`
    (пословные тайминги — основа и субтитров, и резов):
@@ -55,7 +60,7 @@
 ## Установка
 
 ```bash
-git clone <URL-этого-репозитория>
+git clone https://github.com/VladimirKalajcidi/reels-montage-guide.git
 cd reels-montage-guide
 pip install -r requirements.txt
 ```
