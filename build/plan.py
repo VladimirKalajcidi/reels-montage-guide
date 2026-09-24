@@ -38,7 +38,7 @@ for i, (t0, t1, kind, prm) in enumerate(SHOTS, 1):
 
 print("\n## Источники стоковых материалов")
 print(f"Все материалы лежат в `videos/{VIDEO_NUM}/stock/`, изолированы под этот ролик, "
-      "каждый клип использован ровно один раз — см. assets-manifest.md §2 (Pixabay/Mixkit).")
+      "каждый клип использован ровно один раз — см. assets-manifest.md §3 (Pixabay/Mixkit).")
 print("\n## Звук")
 print("Голос без резов, whoosh на каждом резе картинки (0.040 от пика), impact на "
       "ревиле каждого числа (0.070), музыка из `audios/` (−19 dB от RMS голоса, петля с "
