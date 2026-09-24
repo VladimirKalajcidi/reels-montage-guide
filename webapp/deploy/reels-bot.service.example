@@ -1,0 +1,18 @@
+[Unit]
+Description=Reels Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=reels
+WorkingDirectory=/srv/reels_good/webapp
+Environment=NODE_ENV=production
+Environment=TELEGRAM_BOT_TOKEN=123456:replace_me
+Environment=TELEGRAM_ALLOWED_CHAT_ID=123456789
+Environment=REELS_PROJECT_ROOT=/srv/reels_good
+ExecStart=/usr/bin/node /srv/reels_good/webapp/telegram-bot.js
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

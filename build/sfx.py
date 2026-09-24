@@ -1,17 +1,15 @@
-"""Звук ролика — базовый шаблон: синтез SFX + микс с голосом. Уровни — delivery-specs.md §5.
-
-Для нового ролика: скопируй в sfx<N>.py вместе с render<N>.py, поменяй N ниже и в импорте."""
+"""Звук: синтез SFX + микс с голосом. Уровни — delivery-specs.md §5."""
 import os, sys, subprocess, wave
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from storyboard import SHOTS, DUR, NUM_REVEALS
+from storyboard import SHOTS, DUR
+from storyboard import NUM_REVEALS, CASCADES
 
 BUILD = os.path.dirname(os.path.abspath(__file__))
-VIDEO_NUM = 1  # <- номер ролика (папка videos/<N>/) — подставь свой
-SRC = f"{BUILD}/../videos/{VIDEO_NUM}/source.mov"
-VID = f"{BUILD}/assets/_video_{VIDEO_NUM}.mp4"
-OUT = f"{BUILD}/../videos/{VIDEO_NUM}/edit.mp4"
+SRC = "/Users/vladimirkalajcidi/reels_good2/videos/4/source.mov"
+VID = f"{BUILD}/assets/_video.mp4"
+OUT = "/Users/vladimirkalajcidi/reels_good2/videos/4/fourcolor_edit.mp4"
 SR = 48000
 
 
@@ -25,8 +23,10 @@ def env(n, a, d, curve=2.0):
 def low_whoosh(dur=0.42):
     n = int(SR * dur)
     t = np.linspace(0, dur, n, endpoint=False)
+    # шум + низкий свип
     rng = np.random.default_rng(3)
     noise = rng.normal(0, 1, n)
+    # однополюсный ФНЧ ~180 Гц
     a = np.exp(-2 * np.pi * 180 / SR)
     y = np.zeros(n); prev = 0.0
     for i in range(n):
@@ -51,6 +51,15 @@ def impact(dur=0.55):
     return s / (np.abs(s).max() + 1e-9)
 
 
+def tick(dur=0.10):
+    n = int(SR * dur)
+    t = np.linspace(0, dur, n, endpoint=False)
+    rng = np.random.default_rng(5)
+    s = rng.normal(0, 1, n) * np.exp(-t * 110)
+    s += 0.5 * np.sin(2 * np.pi * 1400 * t) * np.exp(-t * 90)
+    return s / (np.abs(s).max() + 1e-9)
+
+
 def read_wav(p):
     w = wave.open(p)
     d = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / 32768
@@ -59,7 +68,7 @@ def read_wav(p):
 
 
 def main():
-    tmp = f"{BUILD}/assets/_voice_{VIDEO_NUM}.wav"
+    tmp = f"{BUILD}/assets/_voice.wav"
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", SRC,
                     "-vn", "-ac", "2", "-ar", str(SR), "-c:a", "pcm_s16le", tmp], check=True)
     voice = read_wav(tmp)
@@ -78,21 +87,27 @@ def main():
         bed[i:i + n, 0] += sig[:n] * gain
         bed[i:i + n, 1] += sig[:n] * gain
 
-    WH, IM = low_whoosh(), impact()
+    WH, IM, TK = low_whoosh(), impact(), tick()
     cuts = [s[0] for s in SHOTS[1:]]
     for c in cuts:
+        # whoosh стартует на кадре реза
         add(WH, c, peak * 0.040)
     for t in NUM_REVEALS:
-        add(IM, t + 0.05, peak * 0.070)
+        add(IM, t, peak * 0.070)
+    for t in CASCADES:
+        for k in range(3):
+            add(TK, t + k * 0.085, peak * 0.030)
 
-    music_path = f"{BUILD}/../audios/song1.mp3"  # <- подставь свой трек из audios/
+    # --- музыкальная подложка (delivery-specs §5: тише всего)
+    music_path = "/Users/vladimirkalajcidi/reels_good2/audios/song1.mp3"
     if os.path.exists(music_path):
-        mw = f"{BUILD}/assets/_music_{VIDEO_NUM}.wav"
+        mw = f"{BUILD}/assets/_music.wav"
         subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", music_path,
                         "-ac", "2", "-ar", str(SR), "-c:a", "pcm_s16le", mw], check=True)
         mus = read_wav(mw)
         if mus.shape[1] == 1:
             mus = np.repeat(mus, 2, axis=1)
+        # склейка петли с кроссфейдом 0.25с, чтобы шва не было слышно
         xf = int(0.25 * SR)
         core = mus[:len(mus) - xf]
         tail = mus[len(mus) - xf:]
@@ -101,6 +116,7 @@ def main():
         loop[:xf] = loop[:xf] * ramp + tail * (1 - ramp)
         reps = int(np.ceil(N / len(loop))) + 1
         track = np.tile(loop, (reps, 1))[:N]
+        # уровень: ~19 dB ниже RMS голоса
         vr = np.sqrt((voice ** 2).mean()) + 1e-9
         mr = np.sqrt((track ** 2).mean()) + 1e-9
         track *= (vr / mr) * (10 ** (-19 / 20))
@@ -114,7 +130,7 @@ def main():
     m = np.abs(mix).max()
     if m > 0.99:
         mix *= 0.99 / m
-    out = f"{BUILD}/assets/_mix_{VIDEO_NUM}.wav"
+    out = f"{BUILD}/assets/_mix.wav"
     w = wave.open(out, "wb"); w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR)
     w.writeframes((mix * 32767).astype(np.int16).tobytes()); w.close()
 
