@@ -19,8 +19,10 @@
   тело `multipart/form-data`: `file=<аудио/видео>`, `model=whisper-1`, `language=ru`,
   `response_format=verbose_json`, `timestamp_granularities[]=word`
 - Ответ содержит `words: [{word, start, end}, ...]` — это и есть пословные тайминги для
-  `words.json` (см. `START-HERE.md`, блок 1). Можно отправлять исходный `.mov` целиком,
-  выделять звук отдельно не обязательно.
+  `words.json` (см. `START-HERE.md`, блок 1). Исходный `.mov` можно отправлять целиком,
+  **только если он меньше 25 МБ** — лимит API (иначе ответ `413: Maximum content size limit`).
+  Больше — вынуть звук: `ffmpeg -i source.mov -vn -ac 1 -ar 16000 -c:a pcm_s16le voice16k.wav`
+  (≈1.6 МБ на минуту; ролик 15: `.mov` 51с весил 26.3 МБ).
 - Стоимость — доли цента за короткий ролик (~$0.006/минуту).
 
 **Локальный `whisper`** — запасной вариант без ключа/сети (медленнее на CPU):
