@@ -1,99 +1,137 @@
-"""QA-проверки ролика 56.
-
-Проверка 1: текст за пределами карточки — ни одного пикселя ярче 200 вне Card A/B.
-Проверка 4: пустая карточка — средняя яркость внутри карточки на face/stock-планах ≥ 40.
-Каждые 3 кадра + принудительно кадр nf-1 (урок ролика 51).
-"""
-import os, sys, cv2
+"""Автопроверки ролика 56 (формула шнуровки, слот 156) — START-HERE.md, delivery-specs.md §6.
+1. текст за карточкой, 2. наложение строк — обязательные, обе должны дать ноль.
+3. графика × субтитры (пиксельно по альфе >40) — для планов с сеткой, тоже ноль.
+4. карточка не пустая (ролик 25): на планах с лицом и стоком средняя яркость внутри карточки ≥40 —
+   проверки 1–3 пропустили чёрные планы A2 из недописанного A-roll."""
+import os, sys
 import numpy as np
+import cv2
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from storyboard156 import SHOTS, DUR, FACE_KINDS
-
-ROOT  = "/Users/vladimirkalajcidi/reels_challenge"
-VIDEO = f"{ROOT}/videos/56/shoelace_edit.mp4"
-
-# Card A (canvas): x 105-975, y 238-1618
-CA_X1, CA_Y1, CA_X2, CA_Y2 = 105, 238, 975, 1618
-# Card B (canvas): x 110-968, y 614-1234
-CB_X1, CB_Y1, CB_X2, CB_Y2 = 110, 614, 968, 1234
-# Canvas
-CW, CH_C = 1080, 1920
-FPS = 30
+from style import CARD_A, CARD_B, FPS, W, H, text_layer
+from storyboard156 import SHOTS, DUR, CAPS, GRID_KINDS
+import render156 as R
 
 
-def _shot_at(t):
-    for s in SHOTS:
-        if s[0] <= t < s[1]:
-            return s
-    return SHOTS[-1]
+def card_for(kind):
+    return CARD_B if kind in ("stock", "photo") else CARD_A
 
 
-def main():
-    cap = cv2.VideoCapture(VIDEO)
-    assert cap.isOpened(), f"Не открылся: {VIDEO}"
-    nf = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    print(f"файл: {VIDEO}  кадров: {nf}")
-
-    # строим маску «разрешённая зона» (Card A ∪ Card B)
-    allowed = np.zeros((CH_C, CW), dtype=np.uint8)
-    allowed[CA_Y1:CA_Y2, CA_X1:CA_X2] = 1
-    allowed[CB_Y1:CB_Y2, CB_X1:CB_X2] = 1
-
-    err1, err4 = [], []
-    frames_to_check = sorted(set(list(range(0, nf, 3)) + [nf - 1]))
-
-    f_idx = 0
-    for fi in frames_to_check:
-        while f_idx <= fi:
-            ok, bgr = cap.read()
-            if not ok:
-                break
-            f_idx += 1
+def check_text_outside_card():
+    cap = cv2.VideoCapture(R.OUT)
+    nf = int(round(DUR * FPS))
+    bad = n = 0
+    for f in sorted(set(range(0, nf, 3)) | {nf - 1}):      # урок 51: последний кадр — всегда
+        cap.set(cv2.CAP_PROP_POS_FRAMES, f)
+        ok, img = cap.read()
         if not ok:
-            break
-        t = fi / FPS
-        gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-
-        # ── Проверка 1: белые пиксели вне разрешённой зоны ──────────────────
-        bright = (gray > 200).astype(np.uint8)
-        outside = bright * (1 - allowed)
-        cnt = int(outside.sum())
-        if cnt > 0:
-            err1.append((fi, t, cnt))
-
-        # ── Проверка 4: пустая карточка на face/stock планах ─────────────────
-        shot = _shot_at(t)
-        kind = shot[2]
-        if kind in FACE_KINDS or kind == "stock":
-            if kind in FACE_KINDS:
-                roi = gray[CA_Y1:CA_Y2, CA_X1:CA_X2]
-            else:
-                roi = gray[CB_Y1:CB_Y2, CB_X1:CB_X2]
-            mean_bright = float(roi.mean())
-            if mean_bright < 40:
-                err4.append((fi, t, mean_bright, kind))
-
+            print(f"  кадр {f} не читается")
+            bad += 1
+            continue
+        n += 1
+        t = f / FPS
+        kind = SHOTS[R._shot_idx(t)][2]
+        x, y, w, h = card_for(kind)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        gray[y:y + h, x:x + w] = 0
+        if gray.max() > 200:
+            bad += 1
+            ys, xs = np.where(gray > 200)
+            if bad <= 5:
+                print(f"  кадр {f} ({t:.2f}s, {kind}): {len(xs)} px вне карточки, ({xs[0]},{ys[0]})")
     cap.release()
+    print(f"1. текст за карточкой: {bad} кадров из {n} проверенных")
+    return bad
 
-    if err1:
-        print(f"\nПРОВЕРКА 1 FAILED — {len(err1)} кадров с текстом за карточкой:")
-        for fi, t, cnt in err1[:10]:
-            print(f"  кадр {fi} ({t:.2f}с): {cnt} пикс")
-    else:
-        print("\nПРОВЕРКА 1: OK — текст в карточках")
 
-    if err4:
-        print(f"\nПРОВЕРКА 4 FAILED — {len(err4)} чёрных кадров:")
-        for fi, t, mb, kk in err4[:10]:
-            print(f"  кадр {fi} ({t:.2f}с): яркость {mb:.1f}  ({kk})")
-    else:
-        print("ПРОВЕРКА 4: OK — пустых карточек нет")
+def _boxes(items):
+    out = []
+    for it in items:
+        bb = it["font"].getbbox(it["text"], anchor=it.get("anchor", "la"))
+        x0, y0 = it["xy"]
+        out.append((x0 + bb[0], y0 + bb[1], x0 + bb[2], y0 + bb[3]))
+    return out
 
-    if err1 or err4:
-        sys.exit(1)
-    print("\nQA: ОБЕ ПРОВЕРКИ ПРОШЛИ ✓")
+
+def check_line_overlap():
+    bad = checked = 0
+    times = sorted(set([round(c[0] + 0.6, 3) for c in CAPS] + [round(c[1] - 0.02, 3) for c in CAPS]
+                       + [round(R.BLOCKS[i][1] - 0.02, 3) for i in range(len(CAPS))]))
+    for t in times:
+        # на полном раскрытии: все строки блока допечатаны
+        boxes = _boxes(R.caption_items(t))
+        checked += 1
+        for i in range(len(boxes)):
+            for j in range(i + 1, len(boxes)):
+                a, b = boxes[i], boxes[j]
+                if min(a[2], b[2]) > max(a[0], b[0]) and min(a[3], b[3]) > max(a[1], b[1]):
+                    bad += 1
+                    if bad <= 5:
+                        print(f"  t={t:.2f}s: пересечение {a} × {b}")
+    print(f"2. наложение строк: {bad} пар в {checked} проверенных моментах")
+    return bad
+
+
+def check_gfx_vs_text():
+    bad = n = 0
+    for f in range(0, int(round(DUR * FPS)), 3):
+        t = f / FPS
+        shot = SHOTS[R._shot_idx(t)]
+        if shot[2] not in GRID_KINDS:
+            continue
+        cl = R.caption_layer(t)       # субтитры вместе с тенью
+        if cl is None:
+            continue
+        n += 1
+        lay, nums = R.gfx(t, shot)
+        ga = np.zeros((H, W), np.uint8)
+        if lay is not None:
+            ga = np.maximum(ga, np.array(lay.split()[3]))
+        if nums:
+            ga = np.maximum(ga, np.array(text_layer((W, H), nums).split()[3]))
+        ta = np.array(cl.split()[3])
+        k = int(((ga > 40) & (ta > 40)).sum())
+        if k:
+            bad += 1
+            if bad <= 5:
+                print(f"  t={t:.2f}s ({shot[2]}): {k} общих пикселей")
+    print(f"3. графика × субтитры: {bad} кадров из {n} проверенных")
+    return bad
+
+
+def check_card_not_black():
+    cap = cv2.VideoCapture(R.OUT)
+    bad = n = 0
+    nf = int(round(DUR * FPS))
+    # урок ролика 51: последний кадр (nf − 1) — всегда, шаг 3 видит его только случайно
+    for f in sorted(set(range(0, nf, 3)) | {nf - 1}):
+        t = f / FPS
+        kind = SHOTS[R._shot_idx(t)][2]
+        if kind not in ("A1", "A2", "stock", "photo"):
+            continue
+        cap.set(cv2.CAP_PROP_POS_FRAMES, f)
+        ok, img = cap.read()
+        if not ok:
+            print(f"  кадр {f} не читается")
+            bad += 1
+            continue
+        n += 1
+        x, y, w, h = card_for(kind)
+        m = float(img[y + 40:y + h - 40, x + 40:x + w - 40].mean())
+        if m < 40:
+            bad += 1
+            if bad <= 5:
+                print(f"  кадр {f} ({t:.2f}s, {kind}): средняя яркость карточки {m:.1f}")
+    cap.release()
+    print(f"4. пустая карточка: {bad} кадров из {n} проверенных")
+    return bad
 
 
 if __name__ == "__main__":
-    main()
+    print("=== QA ролик 56 (формула шнуровки) ===")
+    n1 = check_text_outside_card()
+    n2 = check_line_overlap()
+    n3 = check_gfx_vs_text()
+    n4 = check_card_not_black()
+    ok = n1 == 0 and n2 == 0 and n3 == 0 and n4 == 0
+    print("ИТОГО:", "ПРОШЁЛ" if ok else f"брак: outside={n1} overlap={n2} gfx={n3} black={n4}")

@@ -1,31 +1,35 @@
-"""Пословные тайминги ролика 56 (слот 156 = 100 + номер папки).
+"""Ролик 56 (слот 156): words.json из сырой расшифровки whisper-1 (videos/56/words_raw.json).
 
-OpenAI Whisper API (whisper-1, ru, verbose_json, word) по videos/56/voice16k.wav
-(.mov 157 МБ > 25 МБ лимита API). Тайминги уточняет snap156.py.
-
-Текст сверен gpt-4o-transcribe (text-only endpoint):
-- «друг по другому» → «друг под другим» (gpt-4o правильнее)
-- «УГЭ» → «ОГЭ» (обе модели ошиблись; контекст — школьный экзамен по математике)
-- «70» + «ти» склеены в «70-ти» (whisper разрезал суффикс)
-- «Задача» — обе модели; оставлено (по контексту «задача/задачи» — без существенной разницы)
-
-9 слов с нулевой или мини-длительностью (0–0.04с) — исправляются ENV в snap156.py:
-  7  клетке   3.300–3.300  (у «на» 2.58–3.30 забрано 0.72с)
-  21 1        9.520–9.520  (первая из пары «1,1» — нет времени)
-  44 конце   17.080–17.080
-  81 берём   31.140–31.160
- 100 Главное 39.020–39.060
- 108 порядку 41.320–41.320
- 135 чтобы   51.500–51.500
- 142 без     52.880–52.920
- 153 ним     56.300–56.300
-
-words.json уже сохранён (исправления внесены при записи из words_raw.json).
-Этот файл нужен только для документации.
+whisper-1, ru, verbose_json, word — по videos/56/voice16k.wav (.mov 157 МБ > 25 МБ лимита API).
+Текст сверен gpt-4o-transcribe (полный файл + вырезка 14.4–16.8с) и повторной расшифровкой вырезок
+(cuts156.py / cuts156.log):
+  «друг по другому» → «друг под другом» (gpt-4o на вырезке; whisper: «по другому» / «по другам»)
+  «УГЭ» → «ОГЭ» (обе модели ошиблись: «УГЭ», «фуге»; по смыслу — экзамен 9 класса)
+  «70» + «ти» → «70-ти» (whisper разрезал суффикс, урок ролика 31)
+  «18» + «5» → «18,5» (одно число; в субтитр не идёт — его несёт синее R5b)
+Границы слов уточняет snap156.py.
 """
 import json
 
 ROOT = "/Users/vladimirkalajcidi/reels_challenge/videos/56"
-words = json.load(open(f"{ROOT}/words.json"))
-assert len(words) == 157, f"ожидалось 157 слов, нашлось {len(words)}"
-print("align156: words.json проверен,", len(words), "слов")
+FIX = {38: ("по", "под"), 39: ("другому", "другом"), 132: ("УГЭ", "ОГЭ")}   # индексы words_raw
+MERGE = [(77, 78, "70", "ти", "70-ти"), (89, 90, "18", "5", "18,5")]          # индексы words_raw
+
+
+def main():
+    raw = json.load(open(f"{ROOT}/words_raw.json"))["words"]
+    w = [dict(word=x["word"], start=round(x["start"], 3), end=round(x["end"], 3)) for x in raw]
+    for k, (old, new) in FIX.items():
+        assert w[k]["word"] == old, (k, w[k]["word"], old)
+        w[k]["word"] = new
+    for a, b, wa, wb, new in sorted(MERGE, reverse=True):
+        assert (w[a]["word"], w[b]["word"]) == (wa, wb) and b == a + 1
+        w[a] = dict(word=new, start=w[a]["start"], end=w[b]["end"])
+        del w[b]
+    assert len(w) == 156
+    json.dump(w, open(f"{ROOT}/words.json", "w"), ensure_ascii=False, indent=1)
+    print("align156: words.json —", len(w), "слов")
+
+
+if __name__ == "__main__":
+    main()

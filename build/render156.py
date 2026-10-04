@@ -10,7 +10,7 @@ from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from style import *
-from storyboard156 import SHOTS, CAPS, DUR, FACE_KINDS, GRID_KINDS
+from storyboard156 import SHOTS, CAPS, DUR, FACE_KINDS, GRID_KINDS, PLOT_KINDS
 import shoelace156
 
 BUILD = os.path.dirname(os.path.abspath(__file__))
@@ -30,9 +30,11 @@ GRADE = (_G_BASE +
          ",curves=all='0/0 0.6/0.59 0.85/0.80 1/0.90',"
          "geq=lum='lum(X,Y)*(0.72+0.28*min(1,X/(W*0.34)))':cb='cb(X,Y)':cr='cr(X,Y)'")
 
-# Кропы по детектору лица (720p ×3): та же точка, что у ролика 54 (faces154.py)
-# центр x≈352×3=1056, y≈645×3=1935; источник 2160×3840 (portrait)
-FRAMINGS = {"A1": (2040, 3237, 36, 0), "A2": (1800, 2855, 156, 120)}
+# Кропы по детектору лица (faces156.py, Haar на 7 кадрах копии 720×1280 после hflip): центр x≈362,
+# глаза y≈601, ширина лица ≈461. В масштабе 720: A1 — вся ширина 720×1142 от (0, 121), глаза на 42%
+# карточки, лицо ≈64% ширины; A2 — 620×984 от (52, 188), глаза на 42%, лицо ≈74%. ×3 для 4K.
+# (v1 брал почти весь кадр 680×1079 от верха — глаза на 56% карточки, пустая стена над головой.)
+FRAMINGS = {"A1": (2160, 3426, 0, 363), "A2": (1860, 2952, 156, 564)}
 
 CX, CY, R_A_ = CARD_A[0], CARD_A[1], R_A
 CW, CH = CARD_A[2], CARD_A[3]
@@ -280,6 +282,14 @@ def _active(t):
     return act[-1] if act else None
 
 
+def caption_items(t, shot_kind=None):
+    """Слова текущей фразы в КОНЕЧНЫХ позициях (для проверки наложения строк, qa156)."""
+    i = _active(t)
+    if i is None:
+        return []
+    return [dict(it, opacity=1.0) for it in LAYOUT[i] if t >= it["t_word"]]
+
+
 def _word_layer(it):
     sh = dict(it, fill=(0, 0, 0), xy=(it["xy"][0]+SH_DX, it["xy"][1]+SH_DY))
     lay = text_layer((W, H), [sh])
@@ -323,12 +333,16 @@ def caption_layer(t):
 _GRID = {}
 
 
-def grid_bg(t):
-    key = round(t * 0.8 / 0.04) * 0.04
+def grid_bg(t, cell=168):
+    """R4: очень медленный дрейф, wobble 0.35 — вершины фигур стоят в узлах (урок ролика 12).
+    Сцены на координатной плоскости — клетка 84 (shoelace156: начало координат в узле)."""
+    key = (cell, round(t * 0.8 / 0.04) * 0.04)
     if key not in _GRID:
         if len(_GRID) > 60:
             _GRID.clear()
-        _GRID[key] = grid_canvas(CW, CH, phase=key, wobble=0.35)
+        # клетка 84 — вдвое больше линий: тоньше и тише, чтобы контур фигуры читался поверх
+        _GRID[key] = grid_canvas(CW, CH, phase=key[1], cell=cell, wobble=0.35,
+                                 **(dict(line=2, alpha=130) if cell == 84 else {}))
     return _GRID[key]
 
 
@@ -353,7 +367,7 @@ def compose(t, shot, frame):
         if frame is not None:
             canvas.paste(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)), (BX, BY), MASK_B)
     elif kind in GRID_KINDS:
-        canvas.paste(grid_bg(t), (CX, CY), MASK_A)
+        canvas.paste(grid_bg(t, 84 if kind in PLOT_KINDS else 168), (CX, CY), MASK_A)
         lay, nums = gfx(t, shot)
         if lay is not None:
             canvas.alpha_composite(lay)

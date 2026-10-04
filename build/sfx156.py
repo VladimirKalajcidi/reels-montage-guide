@@ -1,6 +1,5 @@
-"""Звук ролика 56 (шнурка): синтез SFX + музыка + микс с голосом. Уровни —
-delivery-specs.md §5. Скопировано с sfx154.py (та же комната, song1).
-Слот 156. Impact на синей «18.5» (result), тики на шагах графики (matrix/diagonals)."""
+"""Звук ролика 56 (v2, слот 156): синтез SFX + музыка + микс с голосом. Уровни — delivery-specs.md §5.
+Скопировано с sfx154.py (та же комната, song1). Звука появления текста нет (автор, ролик 11)."""
 import os, sys, subprocess, wave
 import numpy as np
 
@@ -13,11 +12,11 @@ SRC   = f"{ROOT}/videos/56/source.mov"
 VID   = f"{BUILD}/assets/_video_shoelace156.mp4"
 OUT   = f"{ROOT}/videos/56/shoelace_edit.mp4"
 
-# impact на синей «18.5» (начало плана result)
-IMPACTS = [33.12]
-# тики: начало каждого grid-плана кроме num70 и result (визуальные шаги)
-TICKS = [1.80, 3.76, 8.18, 12.88, 19.22, 25.52, 28.52, 42.58, 47.14]
-POST_GAIN_DB = 0.9   # та же комната и песня, что у ролика 54
+import shoelace156
+# impact — синие «18,5» и «6» (R5b), tick — каскады графики, стрелки, новые члены (shoelace156)
+IMPACTS = shoelace156.IMPACT_T
+TICKS = shoelace156.TICK_T
+POST_GAIN_DB = 1.7   # та же комната и song1, что у роликов 50/54; доводка по замеру готового файла
 
 SR = 48000
 
@@ -146,7 +145,7 @@ def main():
                     "-movflags", "+faststart", OUT], check=True)
     tmp2 = OUT.replace(".mp4", ".gain.mp4")
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", OUT, "-c:v", "copy",
-                    "-af", f"volume={POST_GAIN_DB}dB,alimiter=limit=0.75:level=disabled",
+                    "-af", f"volume={POST_GAIN_DB}dB,alimiter=limit=0.80:level=disabled",
                     "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", tmp2], check=True)
     os.replace(tmp2, OUT)
     print("готово:", OUT)
