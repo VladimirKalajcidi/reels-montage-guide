@@ -1,0 +1,25 @@
+[ WARN:0@2175.340] global cap_ffmpeg_impl.hpp:453 _opencv_ffmpeg_interrupt_callback Stream timeout triggered after 333907.154476 ms
+[h264 @ 0x10f147150] Invalid NAL unit size (66809 > 14112).
+[h264 @ 0x10f147150] missing picture in access unit with size 14116
+[h264 @ 0x10f143510] Invalid NAL unit size (66809 > 14112).
+[h264 @ 0x10f143510] Error splitting the input into NAL units.
+[h264 @ 0x10f169a00] reference picture missing during reorder
+[h264 @ 0x10f169a00] reference picture missing during reorder
+[h264 @ 0x10f169a00] Missing reference picture, default is 65556
+[h264 @ 0x10f169a00] Missing reference picture, default is 65556
+[h264 @ 0x10f143510] reference picture missing during reorder
+[h264 @ 0x10f143510] Missing reference picture, default is 65564
+фраз: 6 · мин. жизнь фразы 0.557с
+=== QA хук h1 (версия 2), ролик 66 ===
+1. текст за карточкой: 0 кадров из 344 проверенных
+2. наложение строк: 0 пар в 13 проверенных моментах
+3. графика × субтитры: 0 кадров из 10 проверенных
+4. пустая карточка: 0 кадров из 252 проверенных
+9. невидимые фразы хука: 0 из 6
+5. тело = сданное v1: 36 кадров, пикселей с разницей >8 — max 0.291% (шум повторного кодирования, больше всего на подвижном стоке), выравнивание сдвиг 0 — верно, кадров тела 871 из 871
+6. RGB карточки A: хук (148, 128, 112) · тело (149, 128, 111) · расхождение max 0.9
+7. файл: 1080×1920, r_frame_rate 30/1, кадров 1031, видео 34.367с / звук 34.358с, -14.1 LUFS / -2.2 dBTP, ошибок декодирования 0
+8. деформация кроп ×0.98: карточка A 870px → 888px = ×1.0207 (норма ×1.0204)
+10. шов на 5.300с: пауза 0.140с (хук до 5.29, тело с 10.23; норма 0.10–0.20), скачок сэмплов 0.0095 при p99.9 внутри дорожки 0.2862
+11. версия 1 (monkey_edit.mp4) не тронута: md5 совпадает
+ИТОГО: ПРОШЁЛ
