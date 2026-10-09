@@ -1160,7 +1160,9 @@ PSNR inf). Новый ролик: дописать его в `full.CFG` (кро�
 1. **Техпаспорт.** `ffprobe` — разрешение, fps, длительность, аудио. Выходной fps = fps исходника.
 2. **Расшифровка с пословными таймингами.** Пословные тайминги обязательны — по ним строится
    и раскладка субтитров, и точки резов.
-   - **Основной способ — OpenAI Whisper API** (нужен `OPENAI_API_KEY` в `build/.env`,
+   - **Основной способ — OpenAI Whisper API** (с 2026-10-09 счёт снова пополнен, API отвечает — локальные пути из уроков
+     videos_new/9–17 «API без кредитов» теперь только запасные; перед расшифровкой ответ проверять на `"error"`)
+     (нужен `OPENAI_API_KEY` в `build/.env`,
      см. `README.md`): отправить аудио на
      `https://api.openai.com/v1/audio/transcriptions` (модель `whisper-1`, `language=ru`,
      `response_format=verbose_json`, `timestamp_granularities[]=word`) — ответ уже содержит
